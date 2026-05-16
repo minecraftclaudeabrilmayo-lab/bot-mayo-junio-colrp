@@ -1,12 +1,12 @@
 import discord
 from discord.ext import commands
-from discord import app_commands
 import os
 from dotenv import load_dotenv
+from database import init_db
 
 load_dotenv()
 
-TOKEN = os.getenv("DISCORD_TOKEN")
+TOKEN    = os.getenv("DISCORD_TOKEN")
 GUILD_ID = int(os.getenv("GUILD_ID", "1502814593267929229"))
 
 intents = discord.Intents.default()
@@ -18,6 +18,10 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 @bot.event
 async def on_ready():
     print(f"✅ Bot conectado como {bot.user}")
+    init_db()
+    await bot.change_presence(
+        activity=discord.Game(name="🍉 | ShotFire Studios")
+    )
     await bot.load_extension("cogs.cedula")
     await bot.load_extension("cogs.commands")
     try:
