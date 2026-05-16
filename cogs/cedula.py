@@ -18,11 +18,7 @@ ROL_MOD_ID         = int(os.getenv("ROL_MOD_ID", "1502815947759550624"))
 ROL_ADMIN_ID       = int(os.getenv("ROL_ADMIN_ID", "1503199431913377832"))
 ROL_CIUDADANOS_ID  = int(os.getenv("ROL_CIUDADANOS_ID", "1502815998707892226"))
 
-ASSETS_DIR = os.path.join(os.path.dirname(__file__), "..", "assets")
-
-# ─────────────────────────────────────────────
-# GENERACIÓN DE IMAGEN
-# ─────────────────────────────────────────────
+ASSETS_DIR = os.path.dirname(__file__)
 
 def cargar_fuente(size):
     try:
@@ -54,7 +50,7 @@ def obtener_avatar_roblox(url: str):
 def generar_dni(datos: dict) -> io.BytesIO:
     base_path = os.path.join(ASSETS_DIR, "dni_base.png")
     if not os.path.exists(base_path):
-        raise FileNotFoundError("Falta assets/dni_base.png")
+        raise FileNotFoundError("Falta dni_base.png")
 
     dni = Image.open(base_path).convert("RGBA")
     draw = ImageDraw.Draw(dni)
@@ -89,10 +85,6 @@ def generar_dni(datos: dict) -> io.BytesIO:
     dni.convert("RGB").save(buffer, format="PNG")
     buffer.seek(0)
     return buffer
-
-# ─────────────────────────────────────────────
-# MODAL
-# ─────────────────────────────────────────────
 
 class ModalCedula(discord.ui.Modal):
     def __init__(self, tipo: str):
@@ -185,10 +177,6 @@ class ModalCedula(discord.ui.Modal):
             ephemeral=True
         )
 
-# ─────────────────────────────────────────────
-# VISTA BOTONES
-# ─────────────────────────────────────────────
-
 class VistaBotonCedula(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -204,10 +192,6 @@ class VistaBotonCedula(discord.ui.View):
     @discord.ui.button(label="💀 Realizar CK", style=discord.ButtonStyle.danger, custom_id="btn_ck")
     async def ck(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(ModalCedula("ck"))
-
-# ─────────────────────────────────────────────
-# COG
-# ─────────────────────────────────────────────
 
 class CedulaCog(commands.Cog):
     def __init__(self, bot):
