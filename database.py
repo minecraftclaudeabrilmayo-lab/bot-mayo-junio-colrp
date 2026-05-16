@@ -1,20 +1,29 @@
-import asyncpg
+import psycopg2
+import psycopg2.extras
 import os
+from contextlib import contextmanager
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-_pool = None
+def get_conn():
+    return psycopg2.connect(DATABASE_URL)
 
-async def get_pool():
-    global _pool
-    if _pool is None:
-        _pool = await asyncpg.create_pool(DATABASE_URL)
-        await init_db(_pool)
-    return _pool
+@contextmanager
+def cursor():
+    conn = get_conn()
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        yield cur
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
-async def init_db(pool):
-    async with pool.acquire() as conn:
-        await conn.execute("""
+def init_db():
+    with cursor() as cur:
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS cedulas (
                 id SERIAL PRIMARY KEY,
                 discord_id TEXT NOT NULL,
@@ -35,12 +44,11 @@ async def init_db(pool):
     print("✅ Base de datos inicializada")
 
 async def guardar_cedula(discord_id: str, personaje_num: int, datos: dict, imagen_url: str, tipo: str = "cedula"):
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        await conn.execute("""
+    with cursor() as cur:
+        cur.execute("""
             INSERT INTO cedulas 
                 (discord_id, personaje_num, apellidos, nombres, fecha_nacimiento, lugar_nacimiento, sexo, fecha_expiracion, roblox_url, imagen_url, tipo)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (discord_id, personaje_num)
             DO UPDATE SET
                 apellidos = EXCLUDED.apellidos,
@@ -54,31 +62,31 @@ async def guardar_cedula(discord_id: str, personaje_num: int, datos: dict, image
                 tipo = EXCLUDED.tipo,
                 creado_at = NOW()
         """,
-        discord_id,
-        personaje_num,
-        datos["apellidos"],
-        datos["nombres"],
-        datos["fecha_nacimiento"],
-        datos["lugar_nacimiento"],
-        datos["sexo"],
-        datos["fecha_expiracion"],
-        datos["roblox_url"],
-        imagen_url,
-        tipo
-        )
+        (
+            discord_id,
+            personaje_num,
+            datos["apellidos"],
+            datos["nombres"],
+            datos["fecha_nacimiento"],
+            datos["lugar_nacimiento"],
+            datos["sexo"],
+            datos["fecha_expiracion"],
+            datos["roblox_url"],
+            imagen_url,
+            tipo
+        ))
 
 async def obtener_cedula(discord_id: str, personaje_num: int):
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow("""
-            SELECT * FROM cedulas WHERE discord_id = $1 AND personaje_num = $2
-        """, discord_id, personaje_num)
+    with cursor() as cur:
+        cur.execute("""
+            SELECT * FROM cedulas WHERE discord_id = %s AND personaje_num = %s
+        """, (discord_id, personaje_num))
+        row = cur.fetchone()
         return dict(row) if row else None
 
 async def eliminar_cedula(discord_id: str, personaje_num: int):
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        result = await conn.execute("""
-            DELETE FROM cedulas WHERE discord_id = $1 AND personaje_num = $2
-        """, discord_id, personaje_num)
-        return result != "DELETE 0"
+    with cursor() as cur:
+        cur.execute("""
+            DELETE FROM cedulas WHERE discord_id = %s AND personaje_num = %s
+        """, (discord_id, personaje_num))
+        return cur.rowcount > 0
