@@ -3,7 +3,6 @@ from discord.ext import commands
 from discord import app_commands
 from PIL import Image, ImageDraw, ImageFont
 import requests
-import aiohttp
 import io
 import os
 import re
@@ -19,8 +18,7 @@ ROL_MOD_ID         = int(os.getenv("ROL_MOD_ID", "1502815947759550624"))
 ROL_ADMIN_ID       = int(os.getenv("ROL_ADMIN_ID", "1503199431913377832"))
 ROL_CIUDADANOS_ID  = int(os.getenv("ROL_CIUDADANOS_ID", "1502815998707892226"))
 
-ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
-os.makedirs(ASSETS_DIR, exist_ok=True)
+ASSETS_DIR = os.path.join(os.path.dirname(__file__), "..", "assets")
 
 # ─────────────────────────────────────────────
 # GENERACIÓN DE IMAGEN
@@ -53,7 +51,7 @@ def obtener_avatar_roblox(url: str):
         print(f"Error avatar Roblox: {e}")
         return None
 
-def generar_dni(datos: dict) -> bytes:
+def generar_dni(datos: dict) -> io.BytesIO:
     base_path = os.path.join(ASSETS_DIR, "dni_base.png")
     if not os.path.exists(base_path):
         raise FileNotFoundError("Falta assets/dni_base.png")
@@ -67,13 +65,11 @@ def generar_dni(datos: dict) -> bytes:
     color_dato  = (0, 48, 135)
     color_label = (100, 100, 100)
 
-    # Foto de perfil Roblox
     avatar = obtener_avatar_roblox(datos.get("roblox_url", ""))
     if avatar:
         avatar = avatar.resize((175, 220), Image.LANCZOS)
         dni.paste(avatar, (32, 65), avatar)
 
-    # Campos de texto
     x = 245
     campos = [
         (80,  100, "APELLIDOS",           datos.get("apellidos", "")),
@@ -86,10 +82,9 @@ def generar_dni(datos: dict) -> bytes:
         draw.text((x, label_y), label_txt, fill=color_label, font=fuente_label)
         draw.text((x, dato_y),  dato_txt,  fill=color_dato,  font=fuente_dato)
 
-    draw.text((x + 370, 220), "SEXO",                 fill=color_label, font=fuente_label)
-    draw.text((x + 370, 240), datos.get("sexo", ""),  fill=color_dato,  font=fuente_dato)
+    draw.text((x + 370, 220), "SEXO",                fill=color_label, font=fuente_label)
+    draw.text((x + 370, 240), datos.get("sexo", ""), fill=color_dato,  font=fuente_dato)
 
-    # Retornar como bytes
     buffer = io.BytesIO()
     dni.convert("RGB").save(buffer, format="PNG")
     buffer.seek(0)
@@ -105,11 +100,11 @@ class ModalCedula(discord.ui.Modal):
         super().__init__(title=titulo, timeout=300)
         self.tipo = tipo
 
-        self.roblox_url   = discord.ui.TextInput(label="URL de perfil de Roblox", placeholder="https://www.roblox.com/users/123456/profile", required=True, max_length=200)
-        self.apellidos    = discord.ui.TextInput(label="Apellidos", placeholder="Ej: García Martínez", required=True, max_length=60)
-        self.nombres      = discord.ui.TextInput(label="Nombres", placeholder="Ej: Juan Carlos", required=True, max_length=60)
-        self.fecha_nac    = discord.ui.TextInput(label="Fecha de nacimiento", placeholder="DD/MM/AAAA", required=True, max_length=20)
-        self.lugar_sexo   = discord.ui.TextInput(label="Lugar de nacimiento | Sexo | F. expiración", placeholder="Bogotá | M | 01/01/2030", required=True, max_length=100)
+        self.roblox_url = discord.ui.TextInput(label="URL de perfil de Roblox", placeholder="https://www.roblox.com/users/123456/profile", required=True, max_length=200)
+        self.apellidos  = discord.ui.TextInput(label="Apellidos", placeholder="Ej: García Martínez", required=True, max_length=60)
+        self.nombres    = discord.ui.TextInput(label="Nombres", placeholder="Ej: Juan Carlos", required=True, max_length=60)
+        self.fecha_nac  = discord.ui.TextInput(label="Fecha de nacimiento", placeholder="DD/MM/AAAA", required=True, max_length=20)
+        self.lugar_sexo = discord.ui.TextInput(label="Lugar de nacimiento | Sexo | F. expiración", placeholder="Bogotá | M | 01/01/2030", required=True, max_length=100)
 
         self.add_item(self.roblox_url)
         self.add_item(self.apellidos)
@@ -128,16 +123,15 @@ class ModalCedula(discord.ui.Modal):
         lugar, sexo, fecha_exp = partes[0], partes[1], partes[2]
 
         datos = {
-            "apellidos":       self.apellidos.value.upper(),
-            "nombres":         self.nombres.value.upper(),
+            "apellidos":        self.apellidos.value.upper(),
+            "nombres":          self.nombres.value.upper(),
             "fecha_nacimiento": self.fecha_nac.value,
             "lugar_nacimiento": lugar.upper(),
-            "sexo":            sexo.upper(),
+            "sexo":             sexo.upper(),
             "fecha_expiracion": fecha_exp,
-            "roblox_url":      self.roblox_url.value.strip(),
+            "roblox_url":       self.roblox_url.value.strip(),
         }
 
-        # Generar imagen
         try:
             imagen_buffer = generar_dni(datos)
         except FileNotFoundError:
@@ -147,7 +141,6 @@ class ModalCedula(discord.ui.Modal):
             await interaction.followup.send(f"❌ Error generando la cédula: `{e}`", ephemeral=True)
             return
 
-        # Determinar número de personaje
         cedula1 = await obtener_cedula(str(interaction.user.id), 1)
         cedula2 = await obtener_cedula(str(interaction.user.id), 2)
 
@@ -169,7 +162,6 @@ class ModalCedula(discord.ui.Modal):
 
         nombre_archivo = f"dni_{uuid.uuid4().hex}.png"
 
-        # Guardar en DB con imagen como attachment
         canal_registros = interaction.guild.get_channel(CANAL_REGISTROS_ID)
         imagen_url = ""
         if canal_registros:
@@ -180,12 +172,10 @@ class ModalCedula(discord.ui.Modal):
                 description=f"**{datos['nombres']} {datos['apellidos']}**\nPersonaje #{personaje_num}",
                 color=discord.Color.from_str("#003087")
             )
-            embed.set_footer(text=f"Emitido por: {interaction.user} | ID: {interaction.user.id}")
-            imagen_buffer.seek(0)
-            file2 = discord.File(imagen_buffer, filename=nombre_archivo)
             embed.set_image(url=f"attachment://{nombre_archivo}")
-            msg = await canal_registros.send(embed=embed, file=file2)
-            if msg.embeds and msg.attachments:
+            embed.set_footer(text=f"Emitido por: {interaction.user} | ID: {interaction.user.id}")
+            msg = await canal_registros.send(embed=embed, file=file)
+            if msg.attachments:
                 imagen_url = msg.attachments[0].url
 
         await guardar_cedula(str(interaction.user.id), personaje_num, datos, imagen_url, self.tipo)
